@@ -1,0 +1,17 @@
+# Environment files
+.env
+.env.local
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# FAISS index directory
+faiss_index/
+
+# Streamlit temp files
+streamlit
+datastore.json
+
+# OS files
+.DS_Store
