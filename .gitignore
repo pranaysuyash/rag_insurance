@@ -6,8 +6,11 @@
 __pycache__/
 *.py[cod]
 
-# FAISS index directory
-faiss_index/
+# FAISS artefacts
+faiss_*/          # catches faiss_hybrid/, faiss_index_flat/, faiss_semantic/
+*.faiss
+*.pkl
+
 
 # Streamlit temp files
 streamlit
