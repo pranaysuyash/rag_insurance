@@ -1,11 +1,15 @@
-# Policy QA Agent
+# Policy QA Agent
 
-**Policy QA Agent** is a Streamlit application that validates and analyzes health or medical insurance policies. It leverages state-of-the-art LLMs and embeddings to:
+**Policy QA Agent** is a Streamlit application that validates, indexes and answers questions about health or medical insurance policies. It combines classic metadata extraction with hybrid **RAG** (Retrieval‑Augmented Generation) so users can upload a policy PDF or scan and immediately start chatting with it.
 
-- **Validate** whether an uploaded document is a health insurance policy
-- **Extract** text from PDFs and images using OCR and PDF parsing
-- **Index** content in a FAISS vector store for fast retrieval
-- **Answer** user queries conversationally about policy details
+---
+
+## ✨ What’s new (April 2025)
+
+- **Prompt‑fix release – no more `ValueError: variable context should be a list …`**  
+  The RAG prompt now injects the retrieved context as a plain string instead of a `MessagesPlaceholder`, eliminating the runtime crash.
+- **Instant answers from metadata** (e.g. commencement date, _insured‑since_ rows) before invoking the vector store – lightning‑fast for common queries.
+- **Single‑file app ➡ `policy_rag_hybrid.py`** – clearer naming, easier `streamlit run`.
 
 ---
 
@@ -16,151 +20,144 @@
 3. [Installation](#installation)
 4. [Configuration](#configuration)
 5. [Usage](#usage)
-6. [File Structure](#file-structure)
+6. [File Structure](#file-structure)
 7. [Dependencies](#dependencies)
 8. [Contributing](#contributing)
 9. [License](#license)
 
 ---
 
-## Features
+## 1  Features
 
-- **Policy Validation**: Uses OpenAI GPT models to verify that an uploaded document is a health/medical insurance policy.
-- **Document Processing**:
-  - **PDF**: Parses with `langchain_community.document_loaders.PyPDFLoader`.
-  - **Image**: Extracts text via OCR (`pytesseract`).
-- **Vector Store Indexing**: Splits content into fixed-size chunks and indexes with FAISS for similarity search.
-- **Conversational QA**: Retrieves relevant chunks and answers free-form questions in a chat-like interface.
-- **Customizable Models**:
-  - **Embeddings**: OpenAI, Cohere, or HuggingFace sentence-transformers.
-  - **LLMs**: OpenAI GPT-3.5/4 family or local HuggingFace pipelines (e.g., GPT-2).
-- **Caching**: Uses Streamlit’s caching to avoid reloading models or rebuilding indexes on every interaction.
+| Category               | Description                                                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Smart validation**   | Verifies the upload is a health/medical insurance document using GPT.                                                   |
+| **OCR + PDF parsing**  | Extracts text from native PDFs _or_ scanned images via `pytesseract`.                                                   |
+| **Metadata fast‑path** | Detects policy commencement / _insured since_ dates and answers certain questions instantly.                            |
+| **Hybrid RAG**         | Splits text + flattened table rows, embeds with OpenAI Ada, stores in FAISS and feeds top‑K chunks to GPT‑4‑class LLMs. |
+| **Conversational QA**  | Natural chat interface in Streamlit with source‑chunk disclosure.                                                       |
+| **Model swap**         | Drop‑in support for alternative embedding or LLM providers (Cohere, Hugging Face, local GGUF).                          |
+| **Caching**            | Parsed text, OCR output and FAISS indexes are cached for repeat uploads.                                                |
 
 ---
 
-## Architecture
+## 2  Architecture
 
-```
-┌──────────────────┐   upload    ┌───────────────┐
-│  Streamlit UI    │ ──────────▶ │ PDF / Image   │
-└──────────────────┘            │ Extraction    │
+```text
+┌──────────────────┐  upload    ┌───────────────┐
+│  Streamlit UI    │ ─────────▶ │  PDF / Image  │
+└──────────────────┘            │ Extraction    │
                                 └───────────────┘
-                                       │
+                                       │ plain‑text + rows
                                        ▼
                         ┌────────────────────────┐
-                        │ Text Split & Embedding │
+                        │ Split, Embed (Ada‑002) │
                         └────────────────────────┘
                                        │
                                        ▼
                         ┌────────────────────────┐
-                        │  FAISS Vector Store    │
+                        │   FAISS Vector Store   │
                         └────────────────────────┘
                                        │
                                question│answer
                                        ▼
                         ┌────────────────────────┐
-                        │ Conversational Chain   │
+                        │  Conversational RAG    │
                         └────────────────────────┘
-                                       │
+                                       │ rescue‑LLM (optional)
                                        ▼
-                                Streamlit UI
+                                Streamlit UI
 ```
 
 ---
 
-## Installation
-
-1. **Clone the repo**
-
-   ```bash
-   git clone https://github.com/your-repo/policy-qa-agent.git
-   cd policy-qa-agent
-   ```
-
-2. **Create & activate a virtual environment**
-
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-
-3. **Install dependencies**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Install Tesseract OCR engine**
-   - **macOS (Homebrew)**: `brew install tesseract`
-   - **Ubuntu**: `sudo apt-get install tesseract-ocr`
-
----
-
-## Configuration
-
-1. Copy `.env.example` to `.env`
-2. Populate environment variables:
-   ```dotenv
-   OPENAI_API_KEY=your_openai_api_key
-   COHERE_API_KEY=your_cohere_api_key       # if using Cohere embeddings
-   UPLOAD_LIMIT_MB=10
-   INDEX_DIR=faiss_index
-   ```
-
----
-
-## Usage
+## 3  Installation
 
 ```bash
-streamlit run app.py
-```
+# 1. Clone
+$ git clone https://github.com/your‑repo/policy‑qa‑agent.git
+$ cd policy‑qa‑agent
 
-1. Open `http://localhost:8501` in your browser.
-2. Upload one or more PDF/image files (insurance policies).
-3. Validate the policy automatically.
-4. Ask questions about coverage, clauses, premiums, etc.
+# 2. Virtual env
+$ python3 -m venv venv && source venv/bin/activate
 
----
+# 3. Dependencies
+$ pip install -r requirements.txt
 
-## File Structure
-
-```
-├── app.py             # Main Streamlit application
-├── requirements.txt   # Python dependencies
-├── .env.example       # Environment variable template
-├── faiss_index/       # Directory for persisted FAISS indexes
-└── README.md          # This file
+# 4. Tesseract (if you need OCR)
+# macOS:  brew install tesseract
+# Ubuntu: sudo apt-get install tesseract-ocr
 ```
 
 ---
 
-## Dependencies
+## 4  Configuration
 
-- **Streamlit**: UI framework
-- **python-dotenv**: Load `.env` configs
-- **openai**: OpenAI v1.x client
-- **langchain-community**: Document loaders, embeddings, chains
-- **langchain-openai**: Updated OpenAIEmbedding classes
-- **pypdf**: PDF parsing
-- **transformers**, **torch**: Local HuggingFace models
-- **faiss-cpu**: Vector store
-- **pillow**, **pytesseract**: OCR
-- **cohere**: Cohere embeddings (optional)
+1. Copy `.env.example` ➜ `.env`
+2. Fill in keys / tweak limits:
 
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/YourFeature`)
-3. Commit your changes (`git commit -m "Add awesome feature"`)
-4. Push to your fork (`git push origin feature/YourFeature`)
-5. Open a Pull Request
-
-Please follow the existing code style and include tests where applicable.
+```dotenv
+OPENAI_API_KEY=your_openai_key
+UPLOAD_LIMIT_MB=25
+INDEX_DIR=faiss_hybrid
+PRIMARY_MODEL=gpt-4o-mini
+```
 
 ---
 
-## License
+## 5  Usage
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+```bash
+streamlit run policy_rag_hybrid.py
+```
+
+1. Visit `http://localhost:8501`.
+2. Drag‑and‑drop one or more policy PDFs/scans.
+3. Ask questions like:
+   - “Since when am I with Niva Bupa?”
+   - “What is the waiting period for cataract surgery?”
+4. The answer panel shows the reply + expandable source snippets.
+
+---
+
+## 6  File Structure
+
+```text
+├── policy_rag_hybrid.py   # Main Streamlit app (this repo)
+├── requirements.txt       # Python deps
+├── .env.example           # Env template
+├── faiss_hybrid/          # Persisted FAISS indexes (auto‑created)
+└── README.md              # You are here
+```
+
+---
+
+## 7  Dependencies (pip)
+
+- **streamlit** / **python‑dotenv**
+- **openai** (& `langchain-openai`)
+- **langchain‑community**
+- **faiss‑cpu**
+- **pypdf**, **pdfplumber**, **pdf2image**
+- **pillow**, **pytesseract**
+- **transformers**, **torch** (optional local LLMs)
+- **cohere** (optional embeddings)
+
+---
+
+## 8  Contributing
+
+```bash
+git checkout -b feat/my-awesome‑thing
+# hack…
+git commit -m "feat: add my awesome thing"
+git push origin feat/my-awesome‑thing
+```
+
+Then open a Pull Request 🎉. Please match the existing code style and include tests if the feature is logic‑heavy.
+
+---
+
+## 9  License
+
+[MIT](LICENSE)
